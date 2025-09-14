@@ -1,5 +1,25 @@
 -- Seed sample data for B-Changer
 
+-- Insert dummy user for development (matches the dummy user_id used in the app)
+INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, created_at, updated_at)
+VALUES (
+  '00000000-0000-0000-0000-000000000000',
+  'dummy@b-changer.dev',
+  '$2a$10$dummy.hash.for.development',
+  NOW(),
+  NOW(),
+  NOW()
+) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.profiles (user_id, role, display_name, created_at, updated_at)
+VALUES (
+  '00000000-0000-0000-0000-000000000000',
+  'customer',
+  'Usuario de Desarrollo',
+  NOW(),
+  NOW()
+) ON CONFLICT (user_id) DO NOTHING;
+
 -- Insert sample categories
 INSERT INTO public.categories (name) VALUES 
   ('Ficción'),

@@ -4,6 +4,7 @@ export type PaymentStatus = "pending" | "paid" | "failed" | "refunded"
 export type LoanStatus = "reserved" | "checked_out" | "returned" | "overdue" | "lost" | "cancelled"
 export type ListingType = "sale" | "loan"
 export type BookFormat = "hardcover" | "paperback" | "ebook" | "audiobook"
+export type FileType = "pdf" | "cover"
 
 export interface Profile {
   user_id: string
@@ -186,4 +187,18 @@ export interface WishlistItem {
   wishlist_id: string
   edition_id: string
   created_at: string
+}
+
+export interface BookFile {
+  id: string
+  edition_id: string
+  file_type: FileType
+  file_name: string
+  file_path: string
+  file_size: number
+  mime_type: string
+  storage_bucket: string
+  uploaded_by: string
+  created_at: string
+  updated_at: string
 }

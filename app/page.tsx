@@ -22,6 +22,9 @@ export default function HomePage() {
               <h1 className="text-xl font-bold text-slate-800">B-Changer</h1>
             </div>
             <div className="flex items-center gap-4">
+              <span className="text-sm text-orange-600 font-medium">
+                🔓 Autenticación desactivada para desarrollo
+              </span>
               <Button asChild variant="ghost" className="text-slate-600 hover:text-cyan-600">
                 <Link href="/auth/login">Iniciar Sesión</Link>
               </Button>
@@ -51,7 +54,7 @@ export default function HomePage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild size="lg" className="bg-cyan-600 hover:bg-cyan-700 text-white shadow-lg">
-                <Link href="/catalog">Explorar Biblioteca</Link>
+                <Link href="/catalog">📚 Explorar Biblioteca</Link>
               </Button>
               <Button
                 asChild
@@ -59,7 +62,25 @@ export default function HomePage() {
                 size="lg"
                 className="border-cyan-200 text-cyan-700 hover:bg-cyan-50 bg-transparent"
               >
-                <Link href="/sell">Subir Libro</Link>
+                <Link href="/upload">📤 Subir Libro</Link>
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 justify-center mt-6">
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/orders">Pedidos</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/loans">Préstamos</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/sell">Vender</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/lend">Prestar</Link>
               </Button>
             </div>
           </div>
@@ -171,6 +192,9 @@ export default function HomePage() {
         <footer className="border-t py-8 px-4 bg-white">
           <div className="container mx-auto text-center text-slate-500">
             <p>&copy; 2024 B-Changer. Hecho con ❤️ para los amantes de los libros.</p>
+            <p className="text-sm text-orange-600 mt-2">
+              🔓 Modo desarrollo: Autenticación desactivada para facilitar las pruebas
+            </p>
           </div>
         </footer>
       </div>
