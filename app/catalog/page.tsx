@@ -140,15 +140,6 @@ function BookCard({ book }: { book: BookWithDetails }) {
         />
 
         {/* Overlay con indicadores */}
-        <div className="absolute top-3 right-3 flex flex-col gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 bg-white/90 hover:bg-white text-red-500 hover:text-red-600 rounded-full shadow-sm"
-          >
-            <Heart className="h-4 w-4" />
-          </Button>
-        </div>
 
         {/* Badges de tipo en la parte inferior */}
         <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-1">
