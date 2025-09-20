@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { BookTable } from "./components/BookTable"
 
 interface DashboardStats {
   totalBooks: number
@@ -245,29 +246,20 @@ export default function AdminBooksPage() {
           </TabsList>
 
           <TabsContent value="books" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Gestión de Libros</CardTitle>
-                    <CardDescription>
-                      Administra todos los libros de la plataforma
-                    </CardDescription>
-                  </div>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Nuevo Libro
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12 text-gray-500">
-                  <Book className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p className="text-lg font-medium mb-2">Tabla de libros próximamente</p>
-                  <p className="text-sm">Aquí podrás ver, editar y gestionar todos los libros.</p>
-                </div>
-              </CardContent>
-            </Card>
+            <BookTable
+              onEditBook={(book) => {
+                toast({
+                  title: "Editar libro",
+                  description: `Funcionalidad próximamente para "${book.title}"`,
+                })
+              }}
+              onViewBook={(book) => {
+                toast({
+                  title: "Ver detalles",
+                  description: `Mostrando detalles de "${book.title}"`,
+                })
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="files" className="space-y-6">

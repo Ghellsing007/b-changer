@@ -9,32 +9,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Book, AlertCircle, CheckCircle } from "lucide-react"
+import { Upload, Book } from "lucide-react"
 import { FileUploader } from "@/components/FileUploader"
 import { useFileUpload } from "@/hooks/useFileUpload"
-import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import type { FileType } from "@/lib/types/database"
-
-interface BookFormData {
-  title: string
-  author: string
-  description: string
-  category: string
-  language: string
-}
-
-interface FileUploadResult {
-  filePath: string
-  fileUrl: string
-  fileName: string
-  fileSize: number
-}
+import { createBookInDB, registerFilesInDB, type BookFormData, type FileUploadResult } from "./book-upload/database"
+import { validateBookForm } from "./book-upload/validation"
 
 export function BookUploadForm() {
   const router = useRouter()
   const { toast } = useToast()
-  const supabase = createClient()
 
   // Estado del formulario
   const [formData, setFormData] = useState<BookFormData>({
@@ -50,130 +35,40 @@ export function BookUploadForm() {
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Usuario dummy para desarrollo (sin autenticación)
+  // Usuario dummy para desarrollo
   const dummyUserId = '00000000-0000-0000-0000-000000000000'
 
   // Hooks de upload
   const pdfUpload = useFileUpload()
   const coverUpload = useFileUpload()
 
+  // Pre-llenar formulario con parámetros de URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const title = urlParams.get('title')
+    const author = urlParams.get('author')
+    const category = urlParams.get('category')
+
+    if (title || author || category) {
+      setFormData(prev => ({
+        ...prev,
+        title: title || prev.title,
+        author: author || prev.author,
+        category: category || prev.category
+      }))
+    }
+  }, [])
+
   // Manejar cambios en el formulario
   const handleInputChange = (field: keyof BookFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
-  }
-
-  // Validar formulario
-  const validateForm = (): string | null => {
-    if (!formData.title.trim()) return 'El título es obligatorio'
-    if (!formData.author.trim()) return 'El autor es obligatorio'
-    if (!formData.description.trim()) return 'La descripción es obligatoria'
-    if (!formData.category.trim()) return 'La categoría es obligatoria'
-    if (!pdfFile) return 'Debes seleccionar un archivo PDF'
-    return null
-  }
-
-  // Crear libro y edición en BD (sin archivos)
-  const createBookInDB = async () => {
-    // Crear o encontrar autor
-    const { data: authorData, error: authorError } = await supabase
-      .from('authors')
-      .upsert({ name: formData.author }, { onConflict: 'name' })
-      .select()
-      .single()
-
-    if (authorError) throw new Error(`Error al crear autor: ${authorError.message}`)
-
-    // Crear o encontrar categoría
-    const { data: categoryData, error: categoryError } = await supabase
-      .from('categories')
-      .upsert({ name: formData.category }, { onConflict: 'name' })
-      .select()
-      .single()
-
-    if (categoryError) throw new Error(`Error al crear categoría: ${categoryError.message}`)
-
-    // Crear libro
-    const { data: bookData, error: bookError } = await supabase
-      .from('books')
-      .insert({
-        title: formData.title,
-        description: formData.description,
-        category_id: categoryData.id
-      })
-      .select()
-      .single()
-
-    if (bookError) throw new Error(`Error al crear libro: ${bookError.message}`)
-
-    // Relacionar libro con autor
-    const { error: bookAuthorError } = await supabase
-      .from('book_authors')
-      .insert({
-        book_id: bookData.id,
-        author_id: authorData.id
-      })
-
-    if (bookAuthorError) throw new Error(`Error al relacionar autor: ${bookAuthorError.message}`)
-
-    // Crear edición
-    const { data: editionData, error: editionError } = await supabase
-      .from('editions')
-      .insert({
-        book_id: bookData.id,
-        format: 'ebook',
-        isbn: `PDF-${Date.now()}`, // ISBN temporal para PDFs
-        publication_date: new Date().toISOString().split('T')[0]
-      })
-      .select()
-      .single()
-
-    if (editionError) throw new Error(`Error al crear edición: ${editionError.message}`)
-
-    return { bookData, editionData }
-  }
-
-  // Registrar archivos en BD después de subirlos
-  const registerFilesInDB = async (
-    editionId: string,
-    pdfResult: FileUploadResult,
-    coverResult: FileUploadResult | null
-  ) => {
-    const fileInserts = [
-      {
-        edition_id: editionId,
-        file_type: 'pdf',
-        file_name: pdfResult.fileName,
-        file_path: pdfResult.filePath,
-        file_size: pdfResult.fileSize,
-        mime_type: pdfFile!.type,
-        uploaded_by: dummyUserId
-      }
-    ]
-
-    if (coverResult && coverFile) {
-      fileInserts.push({
-        edition_id: editionId,
-        file_type: 'cover',
-        file_name: coverResult.fileName,
-        file_path: coverResult.filePath,
-        file_size: coverResult.fileSize,
-        mime_type: coverFile.type,
-        uploaded_by: dummyUserId
-      })
-    }
-
-    const { error: filesError } = await supabase
-      .from('book_files')
-      .insert(fileInserts)
-
-    if (filesError) throw new Error(`Error al registrar archivos: ${filesError.message}`)
   }
 
   // Manejar envío del formulario
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const validationError = validateForm()
+    const validationError = validateBookForm(formData, pdfFile)
     if (validationError) {
       toast({
         title: "Error de validación",
@@ -187,7 +82,7 @@ export function BookUploadForm() {
 
     try {
       // Crear libro y edición en BD primero
-      const { bookData, editionData } = await createBookInDB()
+      const { bookData, editionData } = await createBookInDB(formData)
 
       // Subir PDF con el UUID real de la edición
       const pdfResult = await pdfUpload.uploadFile(pdfFile!, editionData.id, 'pdf', dummyUserId)
@@ -196,13 +91,13 @@ export function BookUploadForm() {
       }
 
       // Subir portada (opcional)
-      let coverResult = null
+      let coverResult: FileUploadResult | null = null
       if (coverFile) {
         coverResult = await coverUpload.uploadFile(coverFile, editionData.id, 'cover', dummyUserId)
       }
 
       // Registrar archivos en BD
-      await registerFilesInDB(editionData.id, pdfResult, coverResult)
+      await registerFilesInDB(editionData.id, pdfResult, coverResult, pdfFile!, coverFile, dummyUserId)
 
       toast({
         title: "¡Libro subido exitosamente!",
@@ -238,7 +133,6 @@ export function BookUploadForm() {
       setIsSubmitting(false)
     }
   }
-
 
   return (
     <Card className="max-w-4xl mx-auto border-cyan-100">

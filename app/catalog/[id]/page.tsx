@@ -276,6 +276,7 @@ export default async function BookDetailPage({
               )}
             </div>
 
+            {/* ¿Tienes este libro? */}
             <Card className="bg-gradient-to-br from-cyan-50 to-blue-100 border-0 shadow-lg">
               <CardHeader>
                 <CardTitle className="text-cyan-800">¿Tienes este libro?</CardTitle>
@@ -285,7 +286,7 @@ export default async function BookDetailPage({
                   asChild
                   className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white border-0"
                 >
-                  <Link href={`/sell?book=${book.id}`}>
+                  <Link href={`/upload?book=${book.id}&title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.authors.map(a => a.name).join(', '))}&category=${encodeURIComponent(book.category?.name || '')}`}>
                     <ShoppingCart className="h-4 w-4 mr-2" />
                     Vender tu Copia
                   </Link>
@@ -294,13 +295,49 @@ export default async function BookDetailPage({
                   asChild
                   className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white border-0"
                 >
-                  <Link href={`/lend?book=${book.id}`}>
+                  <Link href={`/upload?book=${book.id}&title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.authors.map(a => a.name).join(', '))}&category=${encodeURIComponent(book.category?.name || '')}`}>
                     <BookOpen className="h-4 w-4 mr-2" />
                     Prestarlo
                   </Link>
                 </Button>
               </CardContent>
             </Card>
+
+            {/* Subir este libro - Solo si no hay ofertas disponibles */}
+            {allListings.length === 0 && (
+              <Card className="bg-gradient-to-br from-amber-50 to-orange-100 border-0 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-amber-800 flex items-center gap-2">
+                    <Book className="h-5 w-5" />
+                    ¿Quieres subir este libro?
+                  </CardTitle>
+                  <CardDescription className="text-amber-700">
+                    Si tienes el PDF o una versión digital, puedes compartirla con la comunidad.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button
+                    asChild
+                    className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white border-0"
+                  >
+                    <Link href={`/upload?book=${book.id}&title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.authors.map(a => a.name).join(', '))}&category=${encodeURIComponent(book.category?.name || '')}`}>
+                      <Book className="h-4 w-4 mr-2" />
+                      Subir este Libro
+                    </Link>
+                  </Button>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="w-full border-amber-300 text-amber-700 hover:bg-amber-50"
+                  >
+                    <Link href="/suggestions">
+                      <Package className="h-4 w-4 mr-2" />
+                      Ver Sugerencias
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </main>

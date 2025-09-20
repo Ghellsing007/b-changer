@@ -1,6 +1,6 @@
 "use client"
 
-import { Book, Search, ShoppingCart, User, Heart } from "lucide-react"
+import { Book, Search, ShoppingCart, User, Heart, Upload, Lightbulb } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -9,9 +9,9 @@ export function BottomNavigation() {
 
   const navigation = [
     { name: "Inicio", href: "/", icon: Book },
-    { name: "Buscar", href: "/catalog", icon: Search },
-    { name: "Carrito", href: "/cart", icon: ShoppingCart },
-    { name: "Favoritos", href: "/wishlist", icon: Heart },
+    { name: "Catálogo", href: "/catalog", icon: Search },
+    { name: "Subir", href: "/upload", icon: Upload },
+    { name: "Pedidos", href: "/suggestions", icon: Lightbulb },
     { name: "Perfil", href: "/dashboard", icon: User },
   ]
 

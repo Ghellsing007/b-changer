@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
-import { storageService } from '@/lib/supabase/storage'
+import { uploadFileToStorage } from '@/lib/supabase/storage/upload'
+import { validateFileType, validateFileSize } from '@/lib/supabase/storage/validation'
 import type { FileType } from '@/lib/types/database'
 
 interface UploadState {
@@ -15,6 +16,8 @@ interface FileUploadResult {
   fileName: string
   fileSize: number
 }
+
+export type { FileUploadResult }
 
 export function useFileUpload() {
   const [uploadState, setUploadState] = useState<UploadState>({
@@ -35,18 +38,12 @@ export function useFileUpload() {
 
   const validateFile = useCallback((file: File, fileType: FileType): string | null => {
     // Validar tamaño (50MB máximo)
-    const maxSize = 50 * 1024 * 1024 // 50MB
-    if (file.size > maxSize) {
+    if (!validateFileSize(file.size)) {
       return `Archivo demasiado grande. Máximo permitido: 50MB`
     }
 
     // Validar tipo de archivo
-    const allowedTypes = {
-      pdf: ['application/pdf'],
-      cover: ['image/jpeg', 'image/png', 'image/webp']
-    }
-
-    if (!allowedTypes[fileType].includes(file.type)) {
+    if (!validateFileType(file.type, fileType)) {
       const expectedTypes = fileType === 'pdf' ? 'PDF' : 'imagen (JPEG, PNG, WebP)'
       return `Tipo de archivo no válido. Se esperaba: ${expectedTypes}`
     }
@@ -83,8 +80,8 @@ export function useFileUpload() {
       // Simular progreso inicial
       setUploadState(prev => ({ ...prev, progress: 10 }))
 
-      // Subir archivo usando el servicio de storage
-      const result = await storageService.uploadFile(file, editionId, fileType, userId)
+      // Subir archivo usando la función modularizada
+      const result = await uploadFileToStorage(file, editionId, fileType, userId)
 
       // Simular progreso final
       setUploadState(prev => ({ ...prev, progress: 100 }))
