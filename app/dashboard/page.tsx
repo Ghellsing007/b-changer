@@ -12,7 +12,7 @@ export default function DashboardPage() {
         <a href="/upload" className="p-4 border rounded-lg hover:bg-gray-50">
           📤 Subir Libro
         </a>
-        <a href="/sell" className="p-4 border rounded-lg hover:bg-gray-50">
+        <a href="/catalog" className="p-4 border rounded-lg hover:bg-gray-50">
           💰 Vender Libro
         </a>
       </div>

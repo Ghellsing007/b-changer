@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Book, Menu, Search, User, ShoppingCart } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -14,8 +14,6 @@ export function MobileHeader() {
   const navigation = [
     { name: "Inicio", href: "/", icon: Book },
     { name: "Catálogo", href: "/catalog", icon: Search },
-    { name: "Vender", href: "/sell", icon: Book },
-    { name: "Prestar", href: "/lend", icon: Book },
     { name: "Mis Préstamos", href: "/loans", icon: Book },
     { name: "Pedidos", href: "/orders", icon: ShoppingCart },
     { name: "Dashboard", href: "/dashboard", icon: User },
@@ -32,6 +30,9 @@ export function MobileHeader() {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="w-[300px] sm:w-[400px] bg-gradient-to-br from-cyan-50 to-blue-50">
+            <SheetHeader className="mb-4">
+              <SheetTitle className="text-lg font-semibold text-gray-800">Menú</SheetTitle>
+            </SheetHeader>
             <nav className="flex flex-col gap-4">
               <div className="flex items-center gap-2 px-2 py-4">
                 <Book className="h-6 w-6 text-blue-600" />

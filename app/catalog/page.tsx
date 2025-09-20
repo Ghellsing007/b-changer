@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { getSignedUrl } from "@/lib/supabase/storage/urls"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,13 +21,8 @@ interface BookWithDetails {
   authors: { name: string }[]
   editions: any[]
   coverUrl?: string
-}
+  downloadUrl?: string
 
-interface FileUploadResult {
-  filePath: string
-  fileUrl: string
-  fileName: string
-  fileSize: number
 }
 
 async function getBooks(): Promise<BookWithDetails[]> {
@@ -74,23 +70,46 @@ async function getBooks(): Promise<BookWithDetails[]> {
     return []
   }
 
-  return (books || [])
-    .map((book: any) => ({
+  const items = books || []
+  return Promise.all(items.map(async (book: any) => {
+    const coverFile = book.editions?.[0]?.book_files?.find((f: any) => f.file_type === 'cover')
+    const pdfFile = book.editions?.[0]?.book_files?.find((f: any) => f.file_type === 'pdf')
+    let coverUrl: string | undefined
+    let downloadUrl: string | undefined
+    if (coverFile) {
+      try {
+        coverUrl = await getSignedUrl(coverFile.file_path)
+      } catch (error) {
+        console.error("Error obteniendo portada firmada:", error)
+      }
+    }
+    if (pdfFile) {
+      try {
+        downloadUrl = await getSignedUrl(pdfFile.file_path)
+      } catch (error) {
+        console.error("Error obteniendo PDF firmado:", error)
+      }
+    }
+
+    return {
       ...book,
       authors: book.book_authors?.map((ba: any) => ba.author).filter(Boolean) || [],
       editions: book.editions || [],
-      // Add cover URL if available
-      coverUrl: book.editions?.[0]?.book_files?.find((f: any) => f.file_type === 'cover')?.file_path
-    }))
+      coverUrl,
+      downloadUrl,
+    }
+  }))
 }
 
 function BookCard({ book }: { book: BookWithDetails }) {
   const firstEdition = book.editions[0]
   const hasListings = firstEdition?.listings && firstEdition.listings.length > 0
   const hasFiles = firstEdition?.book_files && firstEdition.book_files.length > 0
+  const downloadUrl = book.downloadUrl
 
   // Buscar archivos disponibles
-  const coverFile = firstEdition?.book_files?.find((f: any) => f.file_type === 'cover')
+  const coverUrl = book.coverUrl
+  const displayCover = coverUrl ?? "/book-placeholder.jpg"
   const pdfFile = firstEdition?.book_files?.find((f: any) => f.file_type === 'pdf')
 
   // Determinar tipo de libro
@@ -110,18 +129,12 @@ function BookCard({ book }: { book: BookWithDetails }) {
     <Card className="h-full flex flex-col bg-white hover:shadow-2xl transition-all duration-500 border border-gray-100 hover:border-cyan-200 group overflow-hidden">
       {/* Portada grande en la parte superior */}
       <div className="relative aspect-[3/4] overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200">
-        {coverFile ? (
-          <img
-            src={coverFile.file_path}
-            alt={`Portada de ${book.title}`}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Book className="h-16 w-16 text-gray-400" />
-          </div>
-        )}
+        <img
+          src={displayCover}
+          alt={`Portada de ${book.title}`}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          loading="lazy"
+        />
 
         {/* Overlay con indicadores */}
         <div className="absolute top-3 right-3 flex flex-col gap-2">
@@ -199,13 +212,13 @@ function BookCard({ book }: { book: BookWithDetails }) {
             </Button>
 
             {/* Botones de acción unificados */}
-            {isDownloadable && pdfFile && (
+            {isDownloadable && downloadUrl && (
               <Button
                 asChild
                 size="sm"
                 className={`${(!isDownloadable && isForSale && isForLoan) ? 'w-full' : 'flex-1'} bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white border-0 shadow-sm hover:shadow-md transition-all`}
               >
-                <a href={pdfFile.file_path} target="_blank" rel="noopener noreferrer">
+                <a href={downloadUrl} target="_blank" rel="noopener noreferrer">
                   <Book className="h-4 w-4 mr-1" />
                   Descargar
                 </a>
@@ -318,7 +331,7 @@ function CatalogFilters({
                 <SelectValue placeholder="Todas las categorías" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas las categorías</SelectItem>
+                <SelectItem value="all">Todas las categorías</SelectItem>
                 {availableCategories.map((category) => (
                   <SelectItem key={category} value={category}>
                     {category}
@@ -332,7 +345,7 @@ function CatalogFilters({
                 <SelectValue placeholder="Todos los tipos" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos los tipos</SelectItem>
+                <SelectItem value="all">Todos los tipos</SelectItem>
                 <SelectItem value="downloadable">📥 Descargables</SelectItem>
                 <SelectItem value="for-sale">💰 En venta</SelectItem>
                 <SelectItem value="for-loan">🔄 Para préstamo</SelectItem>
@@ -382,8 +395,8 @@ export default function CatalogPage() {
   const [books, setBooks] = useState<BookWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("")
-  const [selectedType, setSelectedType] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("all")
+  const [selectedType, setSelectedType] = useState("all")
 
   // Cargar libros al montar el componente
   useEffect(() => {
@@ -422,11 +435,11 @@ export default function CatalogPage() {
         book.description?.toLowerCase().includes(searchQuery.toLowerCase())
 
       // Filtro de categoría
-      const matchesCategory = !selectedCategory || book.category?.name === selectedCategory
+      const matchesCategory = selectedCategory === "all" || book.category?.name === selectedCategory
 
       // Filtro de tipo
       let matchesType = true
-      if (selectedType) {
+      if (selectedType !== "all") {
         const firstEdition = book.editions[0]
         const hasFiles = firstEdition?.book_files && firstEdition.book_files.length > 0
         const hasListings = firstEdition?.listings && firstEdition.listings.length > 0

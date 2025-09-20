@@ -2,12 +2,33 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Book, Calendar, User, Package, Heart, Clock, ShoppingCart, BookOpen } from "lucide-react"
+import { Book, Calendar, User, Package, Heart, ShoppingCart, BookOpen } from "lucide-react"
 import { AddToCartButton } from "@/components/add-to-cart-button"
 import { RequestLoanButton } from "@/components/request-loan-button"
 import Link from "next/link"
 import { notFound } from "next/navigation"
+
+type Listing = {
+  id: string
+  type: "sale" | "loan"
+  price: number
+  daily_fee: number
+  quantity: number
+  max_days: number
+  created_at: string
+  seller: { display_name: string; user_id: string }
+}
+
+type Edition = {
+  id: string
+  format: string
+  isbn: string
+  publication_date: string
+  publisher: { name: string } | null
+  coverUrl?: string
+  pdfUrl?: string
+  listings: Listing[]
+}
 
 interface BookDetails {
   id: string
@@ -15,23 +36,9 @@ interface BookDetails {
   description: string
   category: { name: string } | null
   authors: { name: string }[]
-  editions: {
-    id: string
-    format: string
-    isbn: string
-    publication_date: string
-    publisher: { name: string } | null
-    listings: {
-      id: string
-      type: "sale" | "loan"
-      price: number
-      daily_fee: number
-      quantity: number
-      max_days: number
-      seller: { display_name: string; user_id: string }
-      created_at: string
-    }[]
-  }[]
+  coverUrl?: string
+  pdfUrl?: string
+  editions: Edition[]
 }
 
 async function getBookDetails(id: string): Promise<BookDetails | null> {
@@ -53,6 +60,11 @@ async function getBookDetails(id: string): Promise<BookDetails | null> {
         isbn,
         publication_date,
         publisher:publishers(name),
+        book_files(
+          id,
+          file_type,
+          file_path
+        ),
         listings(
           id,
           type,
@@ -66,22 +78,57 @@ async function getBookDetails(id: string): Promise<BookDetails | null> {
       )
     `)
     .eq("id", id)
-    .eq("editions.listings.is_active", true)
     .single()
 
-  if (error) {
+  if (error || !book) {
     console.error("Error fetching book details:", error)
     return null
   }
 
+  const transformedEditions: Edition[] = await Promise.all(
+    (book.editions ?? []).map(async (edition: any) => {
+      const coverFile = edition.book_files?.find((file: any) => file.file_type === "cover")
+      const pdfFile = edition.book_files?.find((file: any) => file.file_type === "pdf")
+
+      let coverUrl: string | undefined
+      let pdfUrl: string | undefined
+
+      if (coverFile) {
+        const { data } = await supabase.storage
+          .from("book-files")
+          .createSignedUrl(coverFile.file_path, 60 * 60)
+        coverUrl = data?.signedUrl
+      }
+
+      if (pdfFile) {
+        const { data } = await supabase.storage
+          .from("book-files")
+          .createSignedUrl(pdfFile.file_path, 60 * 60)
+        pdfUrl = data?.signedUrl
+      }
+
+      return {
+        ...edition,
+        coverUrl,
+        pdfUrl,
+        listings: edition.listings ?? [],
+      }
+    })
+  )
+
+  const coverUrl = transformedEditions.find((edition) => edition.coverUrl)?.coverUrl
+  const pdfUrl = transformedEditions.find((edition) => edition.pdfUrl)?.pdfUrl
+
   return {
     ...book,
-    authors: book.book_authors?.map((ba) => ba.author).filter(Boolean) || [],
-    editions: book.editions || [],
+    authors: book.book_authors?.map((ba: any) => ba.author).filter(Boolean) || [],
+    editions: transformedEditions,
+    coverUrl,
+    pdfUrl,
   }
 }
 
-function ListingCard({ listing, bookTitle }: { listing: any; bookTitle: string }) {
+function ListingCard({ listing, bookTitle }: { listing: Listing; bookTitle: string }) {
   const isSale = listing.type === "sale"
 
   return (
@@ -128,12 +175,10 @@ function ListingCard({ listing, bookTitle }: { listing: any; bookTitle: string }
 
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Clock className="h-4 w-4" />
-            <span>Publicado {new Date(listing.created_at).toLocaleDateString()}</span>
+            <span>Publicado el {new Date(listing.created_at).toLocaleDateString()}</span>
           </div>
 
-          <Separator />
-
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             {isSale ? (
               <AddToCartButton
                 listingId={listing.id}
@@ -167,23 +212,20 @@ function ListingCard({ listing, bookTitle }: { listing: any; bookTitle: string }
   )
 }
 
-export default async function BookDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id } = await params
+export default async function BookDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params
   const book = await getBookDetails(id)
 
   if (!book) {
     notFound()
   }
 
+  const coverUrl = book.coverUrl ?? "/book-placeholder.jpg"
+  const pdfUrl = book.pdfUrl
   const allListings = book.editions.flatMap((edition) => edition.listings.map((listing) => ({ ...listing, edition })))
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      {/* Header */}
       <div className="bg-gradient-to-r from-cyan-600 to-blue-600 text-white">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-2 text-sm text-white/80 mb-2">
@@ -197,19 +239,77 @@ export default async function BookDetailPage({
       </div>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Book Information */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,360px),1fr] xl:grid-cols-[minmax(0,420px),1fr]">
+          <div className="space-y-6">
+            <Card className="bg-white border-0 shadow-lg">
+              <CardContent className="p-6 space-y-4">
+                <div className="relative aspect-[3/4] overflow-hidden rounded-2xl bg-slate-200 shadow-inner">
+                  <img
+                    src={coverUrl}
+                    alt={`Portada de ${book.title}`}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                {pdfUrl && (
+                  <Button
+                    asChild
+                    className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white border-0"
+                  >
+                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
+                      <Book className="h-4 w-4 mr-2" />
+                      Descargar PDF
+                    </a>
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            {pdfUrl && (
+              <Card className="bg-white border-0 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-gray-800">Vista previa del PDF</CardTitle>
+                  <CardDescription className="text-gray-600">
+                    Explora algunas páginas antes de descargar.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="w-full aspect-[3/4] rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-inner">
+                    <iframe
+                      src={`${pdfUrl}#toolbar=0&navpanes=0`}
+                      className="h-full w-full"
+                      title={`Vista previa de ${book.title}`}
+                      loading="lazy"
+                      allow="fullscreen"
+                      allowFullScreen
+                    />
+                  </div>
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="w-full border-cyan-200 text-cyan-700 hover:bg-cyan-50"
+                  >
+                    <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
+                      Abrir PDF en nueva ventana
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          <div className="space-y-6">
             <Card className="bg-gradient-to-br from-white to-blue-50 border-0 shadow-lg">
-              <CardContent className="p-6">
-                <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
-                  {book.title}
-                </h1>
-                <p className="text-xl text-gray-600 mb-4">{book.authors.map((a) => a.name).join(", ")}</p>
+              <CardContent className="p-6 space-y-4">
+                <div>
+                  <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent">
+                    {book.title}
+                  </h1>
+                  <p className="text-xl text-gray-700">{book.authors.map((a) => a.name).join(", ")}</p>
+                </div>
                 {book.category && (
                   <Badge
                     variant="secondary"
-                    className="mb-4 bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-800 border-0"
+                    className="bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-800 border-0 w-fit"
                   >
                     {book.category.name}
                   </Badge>
@@ -218,65 +318,29 @@ export default async function BookDetailPage({
               </CardContent>
             </Card>
 
-            {/* Editions */}
-            <div>
-              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Ediciones Disponibles</h2>
-              <div className="space-y-4">
-                {book.editions.map((edition) => (
-                  <Card
-                    key={edition.id}
-                    className="bg-gradient-to-br from-white to-gray-50 border-0 shadow-md hover:shadow-lg transition-all duration-300"
-                  >
-                    <CardHeader>
-                      <CardTitle className="text-lg text-gray-800">
-                        {edition.format === "paperback" && "Tapa Blanda"}
-                        {edition.format === "hardcover" && "Tapa Dura"}
-                        {edition.format === "ebook" && "Libro Electrónico"}
-                        {edition.format === "audiobook" && "Audiolibro"}
-                      </CardTitle>
-                      <CardDescription className="text-gray-600">
-                        {edition.publisher?.name} • {edition.isbn}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          <span>{new Date(edition.publication_date).getFullYear()}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Book className="h-4 w-4" />
-                          <span>ISBN: {edition.isbn}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Listings Sidebar */}
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Ofertas Disponibles</h2>
-              {allListings.length === 0 ? (
-                <Card className="bg-gradient-to-br from-white to-gray-50 border-0 shadow-md">
-                  <CardContent className="text-center py-8">
+            <Card className="bg-white border-0 shadow-lg">
+              <CardHeader>
+                <CardTitle className="text-gray-800">Ofertas Disponibles</CardTitle>
+                <CardDescription className="text-gray-600">
+                  Elige cómo quieres conseguir este libro.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {allListings.length === 0 ? (
+                  <div className="text-center py-8">
                     <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <p className="text-gray-500">No hay ofertas disponibles para este libro</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="space-y-4">
-                  {allListings.map((listing) => (
-                    <ListingCard key={listing.id} listing={listing} bookTitle={book.title} />
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {allListings.map((listing) => (
+                      <ListingCard key={listing.id} listing={listing} bookTitle={book.title} />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-            {/* ¿Tienes este libro? */}
             <Card className="bg-gradient-to-br from-cyan-50 to-blue-100 border-0 shadow-lg">
               <CardHeader>
                 <CardTitle className="text-cyan-800">¿Tienes este libro?</CardTitle>
@@ -286,7 +350,7 @@ export default async function BookDetailPage({
                   asChild
                   className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white border-0"
                 >
-                  <Link href={`/upload?book=${book.id}&title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.authors.map(a => a.name).join(', '))}&category=${encodeURIComponent(book.category?.name || '')}`}>
+                  <Link href={`/upload?book=${book.id}&title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.authors.map((a) => a.name).join(", "))}&category=${encodeURIComponent(book.category?.name || "")}`}>
                     <ShoppingCart className="h-4 w-4 mr-2" />
                     Vender tu Copia
                   </Link>
@@ -295,7 +359,7 @@ export default async function BookDetailPage({
                   asChild
                   className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white border-0"
                 >
-                  <Link href={`/upload?book=${book.id}&title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.authors.map(a => a.name).join(', '))}&category=${encodeURIComponent(book.category?.name || '')}`}>
+                  <Link href={`/upload?book=${book.id}&title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.authors.map((a) => a.name).join(", "))}&category=${encodeURIComponent(book.category?.name || "")}`}>
                     <BookOpen className="h-4 w-4 mr-2" />
                     Prestarlo
                   </Link>
@@ -303,7 +367,6 @@ export default async function BookDetailPage({
               </CardContent>
             </Card>
 
-            {/* Subir este libro - Solo si no hay ofertas disponibles */}
             {allListings.length === 0 && (
               <Card className="bg-gradient-to-br from-amber-50 to-orange-100 border-0 shadow-lg">
                 <CardHeader>
@@ -320,7 +383,7 @@ export default async function BookDetailPage({
                     asChild
                     className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white border-0"
                   >
-                    <Link href={`/upload?book=${book.id}&title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.authors.map(a => a.name).join(', '))}&category=${encodeURIComponent(book.category?.name || '')}`}>
+                    <Link href={`/upload?book=${book.id}&title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.authors.map((a) => a.name).join(", "))}&category=${encodeURIComponent(book.category?.name || "")}`}>
                       <Book className="h-4 w-4 mr-2" />
                       Subir este Libro
                     </Link>
@@ -338,6 +401,42 @@ export default async function BookDetailPage({
                 </CardContent>
               </Card>
             )}
+
+            <section className="space-y-4">
+              <h2 className="text-2xl font-semibold text-gray-800">Ediciones Disponibles</h2>
+              <div className="space-y-4">
+                {book.editions.map((edition) => (
+                  <Card
+                    key={edition.id}
+                    className="bg-gradient-to-br from-white to-gray-50 border-0 shadow-md hover:shadow-lg transition-all duration-300"
+                  >
+                    <CardHeader>
+                      <CardTitle className="text-lg text-gray-800">
+                        {edition.format === "paperback" && "Tapa Blanda"}
+                        {edition.format === "hardcover" && "Tapa Dura"}
+                        {edition.format === "ebook" && "Libro Electrónico"}
+                        {edition.format === "audiobook" && "Audiolibro"}
+                      </CardTitle>
+                      <CardDescription className="text-gray-600">
+                        {edition.publisher?.name} · {edition.isbn}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center gap-4 text-sm text-gray-500">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          <span>{new Date(edition.publication_date).getFullYear()}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Book className="h-4 w-4" />
+                          <span>ISBN: {edition.isbn}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
           </div>
         </div>
       </main>
