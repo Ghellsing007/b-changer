@@ -8,10 +8,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Book, Search, Filter, Heart, ShoppingCart, X, BookOpen } from "lucide-react"
+import { Book, Search, Filter, ShoppingCart, X, BookOpen } from "lucide-react"
 import Link from "next/link"
 import { Suspense } from "react"
 import { AddToCartButton } from "@/components/add-to-cart-button"
+
+const normalizeValue = (value: string) =>
+  value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase()
 
 interface BookWithDetails {
   id: string
@@ -71,7 +74,7 @@ async function getBooks(): Promise<BookWithDetails[]> {
   }
 
   const items = books || []
-  return Promise.all(items.map(async (book: any) => {
+  const mapped = await Promise.all(items.map(async (book: any) => {
     const coverFile = book.editions?.[0]?.book_files?.find((f: any) => f.file_type === 'cover')
     const pdfFile = book.editions?.[0]?.book_files?.find((f: any) => f.file_type === 'pdf')
     let coverUrl: string | undefined
@@ -99,21 +102,21 @@ async function getBooks(): Promise<BookWithDetails[]> {
       downloadUrl,
     }
   }))
+
+  return mapped.sort((a, b) => (b.downloadUrl ? 1 : 0) - (a.downloadUrl ? 1 : 0))
 }
 
 function BookCard({ book }: { book: BookWithDetails }) {
-  const firstEdition = book.editions[0]
+  const firstEdition = book.editions[0] || {}
   const hasListings = firstEdition?.listings && firstEdition.listings.length > 0
-  const hasFiles = firstEdition?.book_files && firstEdition.book_files.length > 0
   const downloadUrl = book.downloadUrl
 
   // Buscar archivos disponibles
   const coverUrl = book.coverUrl
   const displayCover = coverUrl ?? "/book-placeholder.jpg"
-  const pdfFile = firstEdition?.book_files?.find((f: any) => f.file_type === 'pdf')
 
   // Determinar tipo de libro
-  const isDownloadable = hasFiles && pdfFile
+  const isDownloadable = Boolean(downloadUrl)
   const isForSale = hasListings && firstEdition.listings.some((l: any) => l.type === "sale")
   const isForLoan = hasListings && firstEdition.listings.some((l: any) => l.type === "loan")
 
@@ -427,12 +430,15 @@ export default function CatalogPage() {
 
   // Filtrar libros
   const filteredBooks = useMemo(() => {
+    const normalizedQuery = normalizeValue(searchQuery.trim())
+
     return books.filter(book => {
       // Filtro de búsqueda
-      const matchesSearch = !searchQuery ||
-        book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        book.authors.some(author => author.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        book.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesSearch = !normalizedQuery ||
+        normalizeValue(book.title).includes(normalizedQuery) ||
+        book.authors.some(author => normalizeValue(author.name).includes(normalizedQuery)) ||
+        (book.description && normalizeValue(book.description).includes(normalizedQuery)) ||
+        (book.category?.name && normalizeValue(book.category.name).includes(normalizedQuery))
 
       // Filtro de categoría
       const matchesCategory = selectedCategory === "all" || book.category?.name === selectedCategory

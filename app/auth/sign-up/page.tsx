@@ -55,7 +55,7 @@ export default function SignUpPage() {
       setSuccess("¡Cuenta creada! Revisa tu email para confirmar.")
       setTimeout(() => {
         router.push("/auth/login")
-      }, 2000)
+      }, 5000)
     } catch (err) {
       setError("Error de conexión")
     } finally {

@@ -19,7 +19,7 @@ export default function LoginPage() {
   const searchParams = useSearchParams()
 
   // Obtener la URL de redirección
-  const redirectTo = searchParams.get('redirect') || '/dashboard'
+  const redirectTo = searchParams.get('redirect') || '/catalog'
 
   // Debug solo en cliente
   useEffect(() => {
